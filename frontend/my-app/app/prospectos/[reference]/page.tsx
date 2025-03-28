@@ -1,6 +1,6 @@
-import { notFound } from 'next/navigation';
-import React from 'react';
-import DebtSelector from './debtselector';
+import { notFound } from "next/navigation";
+import React from "react";
+import DebtSelector from "./debtselector";
 
 interface Prospect {
   Reference?: string;
@@ -15,8 +15,7 @@ interface Prospect {
 interface Debt {
   Reference?: string;
   debt_id?: string;
-  has_credit?: string;       
-  status_divida?: string;    
+  status_divida?: string; // e.g., "new", "negotiation", "liquidado", etc.
   pago_a_banco_atualizado?: string;
   [key: string]: any;
 }
@@ -29,64 +28,87 @@ export default async function ProspectDetailPage({
   const reference = params.reference;
 
   // 1) Fetch prospect data
-  const prospectRes = await fetch('http://localhost:3000/api/data', { cache: 'no-store' });
-  if (!prospectRes.ok) {
-    notFound();
-  }
+  const prospectRes = await fetch("http://localhost:3000/api/data", {
+    cache: "no-store",
+  });
+  if (!prospectRes.ok) notFound();
   const prospectJson = await prospectRes.json();
   const prospects: Prospect[] = prospectJson.data || [];
-
   const prospect = prospects.find((p) => p.Reference === reference);
-  if (!prospect) {
-    notFound();
-  }
+  if (!prospect) notFound();
 
   // 2) Fetch debt data
-  const debtRes = await fetch('http://localhost:3000/api/debtdata', { cache: 'no-store' });
-  if (!debtRes.ok) {
-    notFound();
-  }
+  const debtRes = await fetch("http://localhost:3000/api/debtdata", {
+    cache: "no-store",
+  });
+  if (!debtRes.ok) notFound();
   const debtJson = await debtRes.json();
   const debts: Debt[] = debtJson.data || [];
 
-  // 3) Filter: only updated, not liquidated, no credit, matching Reference
-  //    That is: (pago_a_banco_atualizado === 'true') && (status_divida !== 'liquidado') && (has_credit !== 'true')
+  // 3) Filter debts: only include those for this prospect where:
+  //    - status_divida is "new" or "negotiation" (case-insensitive)
+  //    - pago_a_banco_atualizado is not blank
   const clientDebts = debts.filter((d) => {
-    const isMatchRef = d.Reference === reference;
-    const isUpdated = d.pago_a_banco_atualizado?.toLowerCase() === 'true';
-    const isLiquidated = d.status_divida?.toLowerCase() === 'liquidado';
-    const hasCredit = d.has_credit?.toLowerCase() === 'true';
-    return isMatchRef && isUpdated && !isLiquidated && !hasCredit;
+    const status = d.status_divida?.trim().toLowerCase() || "";
+    const isStatusValid = status === "new" || status === "negotiation";
+    const pago = d.pago_a_banco_atualizado?.trim() || "";
+    return d.Reference === reference && isStatusValid && pago !== "";
   });
 
-  // 4) We'll show how many such active debts we found
   const totalActiveDebts = clientDebts.length;
 
   return (
-    <div style={{ padding: '1rem', fontFamily: 'Montserrat, sans-serif' }}>
-      {/* Prospect Info */}
-      <h1 style={{ marginBottom: '1rem', color: '#3f277b' }}>
-        {prospect.Reference} - {prospect.nome}
-      </h1>
-      <div style={{ marginBottom: '1rem' }}>
-        <p>
-          <strong>quantidade_dividas:</strong> {prospect.quantidade_dividas}
+    <div
+      style={{
+        padding: "2rem",
+        fontFamily: "Montserrat, sans-serif",
+        backgroundColor: "#f7f7f7",
+        minHeight: "100vh",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "800px",
+          margin: "0 auto",
+          backgroundColor: "#fff",
+          padding: "2rem",
+          borderRadius: "8px",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+        }}
+      >
+        {/* Prospect Info */}
+        <h1
+          style={{
+            marginBottom: "1.5rem",
+            color: "#3f277b",
+            fontSize: "2rem",
+            borderBottom: "2px solid #e0e0e0",
+            paddingBottom: "0.5rem",
+          }}
+        >
+          {prospect.Reference} - {prospect.nome}
+        </h1>
+        <div style={{ marginBottom: "2rem" }}>
+          <p style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>
+            <strong>Quantidade de Dívidas:</strong>{" "}
+            {prospect.quantidade_dividas}
+          </p>
+          <p style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>
+            <strong>Dívidas Liquidadas:</strong> {prospect.dividas_liquidadas}
+          </p>
+          <p style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>
+            <strong>Dívidas Crédito:</strong> {prospect.dividas_credito}
+          </p>
+        </div>
+
+        {/* Summary */}
+        <p style={{ fontSize: "1.2rem", marginBottom: "2rem", color: "#555" }}>
+          {totalActiveDebts} dívida(s) ativa(s) atualizadas encontrada(s).
         </p>
-        <p>
-          <strong>dividas_liquidadas:</strong> {prospect.dividas_liquidadas}
-        </p>
-        <p>
-          <strong>dividas_credito:</strong> {prospect.dividas_credito}
-        </p>
+
+        {/* Debt Selector */}
+        <DebtSelector debts={clientDebts} />
       </div>
-
-      {/* Summary of how many active debts */}
-      <p style={{ marginBottom: '1.5rem', fontSize: '1rem' }}>
-        {totalActiveDebts} dívida(s) ativa(s) encontrada(s).
-      </p>
-
-      {/* Debt Selector for these active debts */}
-      <DebtSelector debts={clientDebts} />
     </div>
   );
 }
